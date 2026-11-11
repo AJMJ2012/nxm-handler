@@ -14,7 +14,7 @@ main() {
 	url=$1
 
 	if [[ -z "$url" ]]; then
-		message_box error 'No URL provided.'
+		message_box error "No URL provided."
 		return 1
 	fi
 
@@ -31,19 +31,20 @@ main() {
 
 	if [ -n "$STEAM_COMPAT_DATA_PATH" ]; then
 		# Original method that works for Steam.
-		mo2_cmdline=$(get_mo2_cmdline "$mo2_pid" | sed 's/waitforexitandrun/run/')
+		mo2_cmdline=$(get_mo2_cmdline "$mo2_pid" | sed "s/waitforexitandrun/run/")
+		echo $mo2_cmdline;
 	else
 		# With Wine the command line seems to be incomplete, only containing the path
 		# to the exe, rather than including the wine binary, so we'll get it from the
 		# WINELOADER environment variable and insert it manually
 		mo2_cmdline=$(
-			tr '\0' ' ' < "/proc/$mo2_pid/cmdline" |
-			sed 's/\s*$//'
+			tr "\0" " " < "/proc/$mo2_pid/cmdline" |
+			sed "s/\s*$//"
 		)
-		mo2_cmdline="'$WINELOADER' '$mo2_cmdline'"
+		mo2_cmdline="\"$WINELOADER\" \"$mo2_cmdline\""
 	fi
 
-	eval "$mo2_cmdline '$url'"
+	eval "$mo2_cmdline \"$url\""
 }
 
 find_mo2() {
@@ -51,7 +52,11 @@ find_mo2() {
 	# Wine or Proton.
 
 	local pid
-	pid=$(pgrep -f ModOrganizer.exe | tail -n 1)
+	pid=$(pgrep -f "steam.exe.*ModOrganizer.exe" | tail -n 1)
+
+	if [[ -z "$pid" ]]; then
+		pid=$(pgrep -f ModOrganizer.exe | tail -n 1)
+	fi
 
 	if [[ -z "$pid" ]]; then
 		return 1
@@ -66,10 +71,13 @@ get_mo2_cmdline() {
 	# Gets a sanitized command line for a given process id.
 	# Spaces are escaped by quoting each argument.
 
-	sed -E -e 's/.*--//g' < "/proc/$1/cmdline" | \
+	sed -E -e "s/.*--//g" < "/proc/$1/cmdline" | \
 	strings -n 1 | \
+	sed -r "s/^.*steam\.exe.*$/wine/i" | \
 	while read -r line; do
-		printf "'%s' " "$line"
+		if [[ "$line" ]]; then
+			printf "\"%s\" " "$line"
+		fi
 	done
 }
 
@@ -80,7 +88,7 @@ source_mo2_env_vars() {
 
 	# We'll sanitize the env vars by converting the null separators to newlines
 	# and then quoting the values.
-	eval "$(tr '\0' '\n' < "/proc/$1/environ" | sed "s/=\(.*\)\$/='\1'/")"
+	eval "$(tr "\0" "\n" < "/proc/$1/environ" | grep -P "^\S+=" | sed "s/=\(.*\)\$/=\"\1\"/")"
 	export STEAM_COMPAT_CLIENT_INSTALL_PATH
 	export STEAM_COMPAT_DATA_PATH
 	export WINEPREFIX
@@ -97,11 +105,11 @@ message_box() {
 	# Usage: message_box [info | error] <text>
 
 	if [[ -z "$2" ]]; then
-		set -- 'info' "$1"
+		set -- "info" "$1"
 	fi
 
 	case "$XDG_CURRENT_DESKTOP" in
-		'KDE' | 'LXQt')
+		"KDE" | "LXQt")
 			try_kdialog "$@" || try_zenity "$@" || console_log "$@"
 			;;
 		*)
@@ -121,8 +129,8 @@ try_kdialog() {
 
 get_kdialog_flags() {
 	case "$1" in
-		'error') echo '--error' ;;
-		*) echo '--msgbox' ;;
+		"error") echo "--error" ;;
+		*) echo "--msgbox" ;;
 	esac
 }
 
@@ -137,8 +145,8 @@ try_zenity() {
 
 get_zenity_flags() {
 	case "$1" in
-		'error') echo '--error --text' ;;
-		*) echo '--info --text' ;;
+		"error") echo "--error --text" ;;
+		*) echo "--info --text" ;;
 	esac
 }
 
